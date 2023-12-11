@@ -1,11 +1,25 @@
 package ru.itis.masternode.service;
 
-import ru.itis.masternode.api.dto.TestConfig;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import ru.itis.masternode.model.TestConfig;
 
-public interface GRpcSpeedometerAppService {
+import java.util.UUID;
 
-    void scheduleTest(TestConfig testConfig);
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class GRpcSpeedometerAppService {
 
-    void stopTest();
+    private final TestCaseManager testCaseManager;
+
+    public UUID scheduleTest(TestConfig testConfig) {
+        return testCaseManager.schedule(testConfig);
+    }
+
+    public void stopTest(UUID testCaseId) {
+        testCaseManager.stop(testCaseId);
+    }
 
 }
