@@ -1,4 +1,4 @@
-GET http://localhost:8080/worker/rest?depthLevel=2&flowType=BATCH&dataSize=3
+GET http://localhost:8080/worker/rest?depthLevel=2&flowType=WATERFALL&dataSize=3
 
 ###
 POST http://localhost:8080/worker/rest
@@ -6,7 +6,7 @@ Content-Type: application/json
 
 {
   "config": {
-    "depthLevel": 2,
+    "depthLevel": 3,
     "dataSize": 2,
     "flowType": "WATERFALL"
   },
@@ -14,22 +14,34 @@ Content-Type: application/json
     {
       "id": 1,
       "name": "name",
-      "timestamp": "2023-12-12"
+      "lastname": "lastname",
+      "age": 22,
+      "date": "2023-12-12",
+      "height": 5.5
     },
     {
       "id": 2,
       "name": "name",
-      "timestamp": "2023-12-12"
+      "lastname": "lastname",
+      "age": 25,
+      "date": "2023-12-12",
+      "height": 5.0
     },
     {
       "id": 3,
       "name": "name",
-      "timestamp": "2023-12-12"
+      "lastname": "lastname",
+      "age": 32,
+      "date": "2023-12-12",
+      "height": 0.5
     },
     {
       "id": 4,
       "name": "name",
-      "timestamp": "2023-12-12"
+      "lastname": "lastname",
+      "age": 2,
+      "date": "2023-12-12",
+      "height": 6.5
     }
   ]
 }

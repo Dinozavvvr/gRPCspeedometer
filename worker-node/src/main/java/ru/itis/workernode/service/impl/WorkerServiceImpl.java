@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import ru.itis.workernode.client.WorkerClient;
 import ru.itis.workernode.emumeration.FlowType;
+import ru.itis.workernode.exception.model.PostDataException;
 import ru.itis.workernode.model.ExampleData;
 import ru.itis.workernode.model.RequestConfig;
 import ru.itis.workernode.model.WorkerConfigInfo;
@@ -18,10 +19,16 @@ import java.util.List;
 @RequiredArgsConstructor
 public class WorkerServiceImpl implements WorkerService {
 
+    private static final String MANY_DATA_OBJECTS = "Объектов должно быть не меньше, чем depthLevel * dataSize";
+
     private final WorkerClient workerClient;
 
     @Override
     public Mono<WorkerConfigInfo> testPostData(WorkerConfigInfo workerConfigInfo) {
+        if (workerConfigInfo.getData().size() <
+                workerConfigInfo.getConfig().getDataSize() * workerConfigInfo.getConfig().getDepthLevel()) {
+            throw new PostDataException(MANY_DATA_OBJECTS);
+        }
         if (workerConfigInfo.getConfig().getDepthLevel() == 0) {
             return Mono.just(workerConfigInfo);
         } else {

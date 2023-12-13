@@ -1,7 +1,6 @@
 package ru.itis.workernode.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 import ru.itis.workernode.model.RequestConfig;
@@ -15,12 +14,12 @@ public class WorkerController {
 
     private final WorkerService workerService;
 
-    @PostMapping(value = "/rest", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(value = "/rest")
     public Mono<WorkerConfigInfo> testPostData(@RequestBody WorkerConfigInfo workerConfigInfo) {
         return workerService.testPostData(workerConfigInfo);
     }
 
-    @GetMapping(value = "/rest", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @GetMapping(value = "/rest")
     public Mono<WorkerConfigInfo> testGetData(RequestConfig requestConfig) {
         return workerService.testGetData(requestConfig);
     }

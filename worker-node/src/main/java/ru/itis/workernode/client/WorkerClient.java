@@ -26,7 +26,7 @@ public class WorkerClient {
                 .bodyToMono(WorkerConfigInfo.class)
                 .doOnSubscribe(subscription -> log.info("Post data to another worker"))
                 .doOnError(err -> {
-                            log.error("Error Post data to another worker");
+                            log.error(String.format("Error Post data to another worker: %s", err.getMessage()));
                             throw new PostDataException(err.getMessage());
                         }
                 );
@@ -38,7 +38,7 @@ public class WorkerClient {
                 .bodyToMono(WorkerConfigInfo.class)
                 .doOnSubscribe(subscription -> log.info("Post data to another worker"))
                 .doOnError(err -> {
-                            log.error("Error Post data to another worker");
+                    log.error(String.format("Error Get data from another worker: %s", err.getMessage()));
                             throw new PostDataException(err.getMessage());
                         }
                 );

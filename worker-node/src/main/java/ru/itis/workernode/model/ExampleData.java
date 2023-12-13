@@ -17,5 +17,11 @@ public class ExampleData {
 
     private String name;
 
+    private String lastName;
+
+    private Integer age;
+
     private LocalDate date;
+
+    private Double height;
 }
