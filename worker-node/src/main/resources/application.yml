@@ -1,0 +1,2 @@
+worker:
+  url: ${HOST:http://localhost:8080}
