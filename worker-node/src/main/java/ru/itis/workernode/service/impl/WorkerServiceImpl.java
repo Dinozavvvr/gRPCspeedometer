@@ -58,7 +58,7 @@ public class WorkerServiceImpl implements WorkerService {
             return workerClient.getDataToWorker(requestConfig)
                     .map(data -> {
                         if (FlowType.WATERFALL.equals(data.getConfig().getFlowType())) {
-                            for (int i = 0; i < data.getConfig().getDepthLevel(); i++) {
+                            for (int i = 0; i < data.getConfig().getDataSize(); i++) {
                                 data.getData().add(exampleData);
                             }
                         }
