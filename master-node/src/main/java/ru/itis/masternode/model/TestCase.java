@@ -5,8 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import ru.itis.masternode.model.enums.FlowType;
 import ru.itis.masternode.model.enums.RequestMethod;
+import ru.itis.workernode.emumeration.FlowType;
 
 @Getter
 @Setter

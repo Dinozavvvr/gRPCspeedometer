@@ -30,8 +30,6 @@ public class AppConfiguration implements CommandLineRunner {
                 .setCredentials(credentials)
                 .build();
         FirebaseApp.initializeApp(options);
-
-        Firestore firestore = FirestoreClient.getFirestore();
     }
 
 }

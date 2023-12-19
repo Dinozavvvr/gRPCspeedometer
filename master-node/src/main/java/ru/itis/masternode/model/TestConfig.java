@@ -1,8 +1,8 @@
 package ru.itis.masternode.model;
 
 import lombok.Data;
-import ru.itis.masternode.model.enums.FlowType;
 import ru.itis.masternode.model.enums.RequestMethod;
+import ru.itis.workernode.emumeration.FlowType;
 
 @Data
 public class TestConfig {

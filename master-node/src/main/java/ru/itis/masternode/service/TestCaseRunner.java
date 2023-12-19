@@ -1,5 +1,6 @@
 package ru.itis.masternode.service;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -16,6 +17,9 @@ import ru.itis.masternode.model.StatisticsSummary;
 import ru.itis.masternode.model.TestCase;
 import ru.itis.masternode.model.TestCaseStatistics;
 import ru.itis.masternode.model.enums.RequestMethod;
+import ru.itis.workernode.model.ExampleData;
+import ru.itis.workernode.model.RequestConfig;
+import ru.itis.workernode.model.WorkerConfigInfo;
 
 @Slf4j
 @Component
@@ -224,11 +228,35 @@ public class TestCaseRunner {
 
     public static class RestApiPostRequestPublisher extends AbstractRequestPublisher {
 
+        private static final ExampleData exampleData = ExampleData.builder()
+                .id(1)
+                .name("name")
+                .lastName("lastName")
+                .age(22)
+                .date(LocalDate.now())
+                .height(5.5)
+                .build();
         private final WebClient webClient;
+        private final WorkerConfigInfo workerConfigInfo;
 
         public RestApiPostRequestPublisher(TestCase testCase, String workerHost,
                 TestCaseStatistics testCaseStatistics, Long autoStopAtTime) {
             super(testCaseStatistics, autoStopAtTime, testCase);
+
+            List<ExampleData> data = new ArrayList<>();
+            for (int i = 0; i < testCase.getRequestDepth() * testCase.getRequestBodySize(); i++) {
+                data.add(exampleData);
+            }
+
+            this.workerConfigInfo = WorkerConfigInfo.builder()
+                    .config(RequestConfig.builder()
+                            .dataSize(testCase.getRequestBodySize())
+                            .flowType(testCase.getFlowType())
+                            .depthLevel(testCase.getRequestDepth() - 1)
+                            .build())
+                    .data(data)
+                    .build();
+
             this.webClient = WebClient.builder()
                     .baseUrl(workerHost)
                     .build();
@@ -238,14 +266,13 @@ public class TestCaseRunner {
         public void run() {
             while (!isInterrupted() && autoStopAtTime > System.currentTimeMillis()) {
                 webClient.post().uri("/worker/rest")
-                        .bodyValue(new Object())
+                        .bodyValue(workerConfigInfo)
                         .retrieve()
                         .bodyToMono(Object.class)
-                        .doOnNext(response -> {
-                        })
+                        .doOnNext(response -> testCaseStatistics.registerSuccessRequest())
                         .subscribe();
                 try {
-                    Thread.sleep(1);
+                    Thread.sleep(5);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
