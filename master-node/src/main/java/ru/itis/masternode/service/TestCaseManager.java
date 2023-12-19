@@ -1,6 +1,13 @@
 package ru.itis.masternode.service;
 
 import jakarta.annotation.PostConstruct;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -8,16 +15,15 @@ import ru.itis.masternode.model.TestCase;
 import ru.itis.masternode.model.TestCaseState;
 import ru.itis.masternode.model.TestConfig;
 
-import java.util.UUID;
-import java.util.concurrent.*;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class TestCaseManager {
 
     private final BlockingQueue<TestCase> testsCaseQueue = new LinkedBlockingQueue<>(3);
+
     private final ConcurrentHashMap<UUID, TestCaseState> testCaseStates = new ConcurrentHashMap<>();
+
     private final TestCaseRunner testCaseRunner;
 
     @PostConstruct
@@ -53,8 +59,9 @@ public class TestCaseManager {
         switch (testCaseState) {
             case PREPARING -> testCaseRunner.stopTestCase();
             case PENDING -> testCaseManagerQueueListenerThread.stopPending();
-            case WAITING -> testsCaseQueue.stream().filter(testCase -> testCase.getId() == testCaseId)
-                    .forEach(testsCaseQueue::remove);
+            case WAITING ->
+                    testsCaseQueue.stream().filter(testCase -> testCase.getId() == testCaseId)
+                            .forEach(testsCaseQueue::remove);
         }
     }
 
@@ -76,7 +83,8 @@ public class TestCaseManager {
                     testCasePendingThread = null;
                     TestCase testCase = testCaseManager.testsCaseQueue.take();
 
-                    var pendingThread = new TestCaseManagerPendingThread(testCaseManager.testCaseRunner, testCase);
+                    var pendingThread = new TestCaseManagerPendingThread(
+                            testCaseManager.testCaseRunner, testCase);
                     var futureTask = new FutureTask<>(pendingThread);
 
                     testCasePendingThread = new Thread(futureTask);
@@ -111,6 +119,7 @@ public class TestCaseManager {
     public static class TestCaseManagerPendingThread implements Callable<Boolean> {
 
         private final TestCaseRunner testCaseRunner;
+
         private final TestCase testCase;
 
         @Override
@@ -135,7 +144,8 @@ public class TestCaseManager {
         return new TestCase(UUID.randomUUID(),
                 testConfig.getThreadsCount(), testConfig.getRequestDepth(),
                 testConfig.getWorkTime(), testConfig.getRequestMethod(),
-                testConfig.getFlowType(), testConfig.getRequestBodySize()
+                testConfig.getFlowType(), testConfig.getRequestBodySize(),
+                null, null
         );
     }
 

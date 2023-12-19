@@ -1,11 +1,10 @@
 package ru.itis.masternode.service;
 
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.itis.masternode.model.TestConfig;
-
-import java.util.UUID;
 
 @Slf4j
 @Service

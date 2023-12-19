@@ -1,15 +1,15 @@
 package ru.itis.masternode.controller;
 
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.itis.masternode.model.TestConfig;
 import ru.itis.masternode.service.GRpcSpeedometerAppService;
-
-import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -19,7 +19,7 @@ public class GRpcSpeedometerAppController {
     private final GRpcSpeedometerAppService gRpcSpeedometerAppService;
 
     @PostMapping("/start")
-    public ResponseEntity<?> startTest(TestConfig startupConfiguration) {
+    public ResponseEntity<?> startTest(@RequestBody TestConfig startupConfiguration) {
         return ResponseEntity.ok(gRpcSpeedometerAppService.scheduleTest(startupConfiguration));
     }
 
@@ -29,4 +29,5 @@ public class GRpcSpeedometerAppController {
 
         return ResponseEntity.ok().build();
     }
+
 }
