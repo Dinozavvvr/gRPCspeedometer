@@ -15,6 +15,7 @@ import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
 import ru.itis.masternode.model.StatisticsSummary;
 import ru.itis.masternode.model.TestCase;
+import ru.itis.masternode.model.TestCaseState;
 import ru.itis.masternode.model.TestCaseStatistics;
 import ru.itis.masternode.model.enums.RequestMethod;
 import ru.itis.workernode.model.ExampleData;
@@ -30,6 +31,8 @@ public class TestCaseRunner {
 
     private final EnvironmentManager environmentManager;
 
+    private final TestCaseService testCaseService;
+
     private RunnerState runnerState = RunnerState.WAITING_TASK;
 
     private TestCaseRunnerThread testCaseRunnerThread;
@@ -43,14 +46,18 @@ public class TestCaseRunner {
         }
     };
 
-    private final Consumer<TestCase> successCallback = testCase -> {
-        synchronized (this) {
-            this.currentTestCase = null;
-            this.testCaseRunnerThread = null;
-            this.changeState(RunnerState.WAITING_TASK);
-            this.notifyAll();
-        }
-    };
+    public Consumer<TestCase> successCallback() {
+        return testCase -> {
+            synchronized (this) {
+                testCase.setState(TestCaseState.FINISHED);
+                testCaseService.updateTestCase(testCase);
+                this.currentTestCase = null;
+                this.testCaseRunnerThread = null;
+                this.changeState(RunnerState.WAITING_TASK);
+                this.notifyAll();
+            }
+        };
+    }
 
     public void run(TestCase testCase) throws IllegalStateException {
         synchronized (this) {
@@ -64,7 +71,7 @@ public class TestCaseRunner {
 
         log.info("[{}] Starting TestCaseRunnerThread for test ... ", testCase.getId());
         this.testCaseRunnerThread = new TestCaseRunnerThread(this,
-                testCase, stoppingCallback, successCallback, stoppingCallback);
+                testCase, stoppingCallback, successCallback(), stoppingCallback);
         new Thread(testCaseRunnerThread).start();
         log.info("[{}] TestCaseRunnerThread for test case started", testCase.getId());
     }
@@ -108,7 +115,7 @@ public class TestCaseRunner {
                 log.info("[{}] Test case execution finished", testCase.getId());
             } catch (Exception e) {
                 log.info("[{}] Test case execution aborted", testCase.getId());
-                stoppingCallback.accept(testCase);
+                errorCallback.accept(testCase);
             }
         }
 

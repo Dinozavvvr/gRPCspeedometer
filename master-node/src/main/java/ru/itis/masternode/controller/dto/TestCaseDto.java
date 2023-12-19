@@ -1,22 +1,22 @@
-package ru.itis.masternode.model;
+package ru.itis.masternode.controller.dto;
 
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
+import ru.itis.masternode.model.TestCaseState;
+import ru.itis.masternode.model.TestConfig;
 import ru.itis.masternode.model.enums.RequestMethod;
 import ru.itis.workernode.emumeration.FlowType;
 
-@Getter
-@Setter
+@Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class TestCase {
+public class TestCaseDto {
 
-    private UUID id = UUID.randomUUID();
+    private UUID id;
 
     private int threadsCount;
 
@@ -31,9 +31,5 @@ public class TestCase {
     private int requestBodySize;
 
     private TestCaseState state;
-
-    private StatisticsSummary restStatistics;
-
-    private StatisticsSummary grpcStatistics;
 
 }

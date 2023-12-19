@@ -1,16 +1,19 @@
 package ru.itis.masternode.service;
 
 import jakarta.annotation.PostConstruct;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import ru.itis.masternode.controller.dto.TestCaseDto;
+import ru.itis.masternode.exception.TestCaseQueueLimitViolationException;
 import ru.itis.masternode.model.TestCase;
 import ru.itis.masternode.model.TestCaseState;
 import ru.itis.masternode.model.TestConfig;
@@ -22,9 +25,9 @@ public class TestCaseManager {
 
     private final BlockingQueue<TestCase> testsCaseQueue = new LinkedBlockingQueue<>(3);
 
-    private final ConcurrentHashMap<UUID, TestCaseState> testCaseStates = new ConcurrentHashMap<>();
-
     private final TestCaseRunner testCaseRunner;
+
+    private final TestCaseService testCaseService;
 
     @PostConstruct
     public void init() {
@@ -41,20 +44,19 @@ public class TestCaseManager {
 
         try {
             synchronized (this) {
-                changeTestCaseState(testCase, TestCaseState.CREATED);
                 testsCaseQueue.add(testCase);
-                changeTestCaseState(testCase, TestCaseState.WAITING);
-            }
-        } catch (IllegalStateException e) {
-            log.warn("No available space. Queue is full");
-            changeTestCaseState(testCase, TestCaseState.ABORTED);
-        }
 
-        return testCase.getId();
+                testCase.setState(TestCaseState.WAITING);
+                testCaseService.saveTestCase(testCase);
+            }
+            return testCase.getId();
+        } catch (IllegalStateException e) {
+            throw new TestCaseQueueLimitViolationException("No available space. Queue is full");
+        }
     }
 
     public synchronized void stop(UUID testCaseId) {
-        TestCaseState testCaseState = testCaseStates.get(testCaseId);
+        TestCaseState testCaseState = testCaseService.getTestCase(testCaseId).getState();
 
         switch (testCaseState) {
             case PREPARING -> testCaseRunner.stopTestCase();
@@ -65,8 +67,12 @@ public class TestCaseManager {
         }
     }
 
-    private synchronized void changeTestCaseState(TestCase testCase, TestCaseState state) {
-        testCaseStates.put(testCase.getId(), state);
+    public List<TestCaseDto> getTestCases() {
+        return testCaseService.getAllTestCases().stream()
+                .map(testCase -> TestCaseDto.builder()
+                .id(testCase.getId())
+                .state(testCase.getState())
+                .build()).collect(Collectors.toList());
     }
 
     @RequiredArgsConstructor
@@ -90,17 +96,18 @@ public class TestCaseManager {
                     testCasePendingThread = new Thread(futureTask);
 
                     testCasePendingThread.start();
-                    testCaseManager.changeTestCaseState(testCase, TestCaseState.PENDING);
+                    testCase.setState(TestCaseState.PENDING);
+                    testCaseManager.testCaseService.updateTestCase(testCase);
                     log.info("[{}] Pending test case ... ", testCase.getId());
 
                     if (futureTask.get()) {
                         log.info("[{}] Test case accepted by runner ", testCase.getId());
-                        testCaseManager.changeTestCaseState(testCase, TestCaseState.PREPARING);
+                        testCase.setState(TestCaseState.PREPARING);
                     } else {
                         log.error("[{}] Test case aborted ", testCase);
-                        testCaseManager.changeTestCaseState(testCase, TestCaseState.ABORTED);
+                        testCase.setState(TestCaseState.ABORTED);
                     }
-
+                    testCaseManager.testCaseService.updateTestCase(testCase);
                 } catch (InterruptedException | ExecutionException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -145,6 +152,7 @@ public class TestCaseManager {
                 testConfig.getThreadsCount(), testConfig.getRequestDepth(),
                 testConfig.getWorkTime(), testConfig.getRequestMethod(),
                 testConfig.getFlowType(), testConfig.getRequestBodySize(),
+                TestCaseState.CREATED,
                 null, null
         );
     }
