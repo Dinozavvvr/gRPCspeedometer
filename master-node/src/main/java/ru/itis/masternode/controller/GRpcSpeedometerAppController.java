@@ -20,24 +20,28 @@ public class GRpcSpeedometerAppController {
     private final GRpcSpeedometerAppService gRpcSpeedometerAppService;
 
     @PostMapping("/start")
-    public ResponseEntity<?> startTest(@RequestBody TestConfig startupConfiguration) {
-        return ResponseEntity.ok(gRpcSpeedometerAppService.scheduleTest(startupConfiguration));
+    public ResponseEntity<?> startTestCase(@RequestBody TestConfig startupConfiguration) {
+        return ResponseEntity.ok(gRpcSpeedometerAppService.scheduleTestCase(startupConfiguration));
     }
 
     @GetMapping
-    public ResponseEntity<?> getAllTests() {
-        return ResponseEntity.ok(gRpcSpeedometerAppService.getAllTests());
+    public ResponseEntity<?> getAllTestCases() {
+        return ResponseEntity.ok(gRpcSpeedometerAppService.getAllTestCases());
     }
 
     @GetMapping("/{testCaseId}")
-    public ResponseEntity<?> getTest(@PathVariable UUID testCaseId) {
-        return ResponseEntity.ok(gRpcSpeedometerAppService.getTest(testCaseId));
+    public ResponseEntity<?> getTestCase(@PathVariable UUID testCaseId) {
+        return ResponseEntity.ok(gRpcSpeedometerAppService.getTestCase(testCaseId));
     }
 
+    @GetMapping("/{testCaseId}/report")
+    public ResponseEntity<byte[]> downloadTestCaseReport(@PathVariable UUID testCaseId) {
+        return gRpcSpeedometerAppService.gerReport(testCaseId);
+    }
 
     @PostMapping("/{testCaseId}/stop")
     public ResponseEntity<?> stop(@PathVariable UUID testCaseId) {
-        gRpcSpeedometerAppService.stopTest(testCaseId);
+        gRpcSpeedometerAppService.stopTestCase(testCaseId);
 
         return ResponseEntity.ok().build();
     }

@@ -2,6 +2,7 @@ package ru.itis.masternode.service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
@@ -13,11 +14,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
-import ru.itis.masternode.model.StatisticsSummary;
+import ru.itis.masternode.grpc.MasterGrpcService;
 import ru.itis.masternode.model.TestCase;
 import ru.itis.masternode.model.TestCaseState;
-import ru.itis.masternode.model.TestCaseStatistics;
 import ru.itis.masternode.model.enums.RequestMethod;
+import ru.itis.workernode.emumeration.FlowType;
 import ru.itis.workernode.model.ExampleData;
 import ru.itis.workernode.model.RequestConfig;
 import ru.itis.workernode.model.WorkerConfigInfo;
@@ -32,6 +33,8 @@ public class TestCaseRunner {
     private final EnvironmentManager environmentManager;
 
     private final TestCaseService testCaseService;
+
+    private final MasterGrpcService masterGrpcService;
 
     private RunnerState runnerState = RunnerState.WAITING_TASK;
 
@@ -104,19 +107,17 @@ public class TestCaseRunner {
         public void runInternal() {
             try {
                 log.info("[{}] Test case REST execution started", currentTestCase.getId());
-                String workerHost = createContainer();
-
                 TestCaseStatistics testCaseRestStatistics = new TestCaseStatistics(
                         currentTestCase, currentTestCase.getWorkTime(), "REST");
-                startPublisherRestThreads(workerHost, testCaseRestStatistics);
+                startPublisherRestThreads(testCaseRestStatistics);
 
                 log.info("[{}] Test case REST execution finished", currentTestCase.getId());
                 log.info("[{}] Test case gRPC execution started", currentTestCase.getId());
 
                 TestCaseStatistics testCaseGrpcStatistics = new TestCaseStatistics(
-                        currentTestCase, currentTestCase.getWorkTime(), "REST");
+                        currentTestCase, currentTestCase.getWorkTime(), "GRPC");
 
-                startPublisherGrpcThreads(workerHost, testCaseGrpcStatistics);
+                startPublisherGrpcThreads(testCaseGrpcStatistics);
                 log.info("[{}] Test case gRPC execution finished", currentTestCase.getId());
                 successCallback().accept(currentTestCase);
             } catch (InterruptedException e) {
@@ -125,19 +126,9 @@ public class TestCaseRunner {
             }
         }
 
-        private String createContainer() {
-            try {
-                return environmentManager.requireNodesChain(
-                        currentTestCase.getRequestDepth());
-            } catch (InterruptedException e) {
-                log.info("Interrupted during container creating process");
-                Thread.currentThread().interrupt();
-                return null;
-            }
-        }
-
-        private void startPublisherRestThreads(String workerHost,
-                TestCaseStatistics testCaseStatistics) throws InterruptedException {
+        private void startPublisherRestThreads(TestCaseStatistics testCaseStatistics) throws InterruptedException {
+            String workerHost = environmentManager
+                    .requireNodesChainRest(currentTestCase.getRequestDepth());
 
             List<Thread> publisherThreads = new ArrayList<>();
             long delayPerThread = 50;
@@ -175,8 +166,11 @@ public class TestCaseRunner {
             }
         }
 
-        private void startPublisherGrpcThreads(String workerHost,
-                TestCaseStatistics testCaseStatistics) throws InterruptedException {
+        private void startPublisherGrpcThreads(TestCaseStatistics testCaseStatistics)
+                throws InterruptedException {
+            String workerHost = environmentManager
+                    .requireNodesChainGrpc(currentTestCase.getRequestDepth());
+            masterGrpcService.changeGrpcServerAddress(workerHost);
 
             List<Thread> publisherThreads = new ArrayList<>();
             long delayPerThread = 50;
@@ -185,8 +179,8 @@ public class TestCaseRunner {
                 AbstractRequestPublisher abstractRequestPublisher;
 
                 if (currentTestCase.getRequestMethod().equals(RequestMethod.GET)) {
-                    abstractRequestPublisher = new RestApiGetRequestPublisher(
-                            currentTestCase, workerHost, testCaseStatistics
+                    abstractRequestPublisher = new GrpcGetRequestPublisher(
+                            currentTestCase, masterGrpcService, testCaseStatistics
                     );
                 } else {
                     abstractRequestPublisher = new RestApiPostRequestPublisher(
@@ -246,6 +240,55 @@ public class TestCaseRunner {
         protected final TestCaseStatistics testCaseStatistics;
 
         protected final TestCase testCase;
+
+    }
+
+
+    public static class GrpcGetRequestPublisher extends AbstractRequestPublisher {
+
+        private final MasterGrpcService masterGrpcService;
+
+        private final ru.itis.workernode.grpc.WorkerConfigInfo workerConfigInfo;
+
+        public GrpcGetRequestPublisher(TestCase testCase, MasterGrpcService masterGrpcService,
+                TestCaseStatistics testCaseStatistics) {
+            super(testCaseStatistics, testCase);
+
+            this.masterGrpcService = masterGrpcService;
+            RequestConfig requestConfig = RequestConfig.builder()
+                    .depthLevel(testCase.getRequestDepth() - 1)
+                    .flowType(testCase.getFlowType())
+                    .dataSize(testCase.getRequestBodySize())
+                    .build();
+
+            this.workerConfigInfo = ru.itis.workernode.grpc.WorkerConfigInfo.newBuilder()
+                    .setConfig(ru.itis.workernode.grpc.RequestConfig.newBuilder()
+                            .setDepthLevel(requestConfig.getDepthLevel())
+                            .setDataSize(requestConfig.getDataSize())
+                            .setFlowType(
+                                    FlowType.WATERFALL.equals(requestConfig.getFlowType()) ?
+                                            ru.itis.workernode.grpc.FlowType.WATERFALL :
+                                            ru.itis.workernode.grpc.FlowType.BATCH)
+                            .build())
+                    .addAllData(Collections.emptyList())
+                    .build();
+        }
+
+        @Override
+        public void run() {
+            log.info("thread started");
+            while (!Thread.currentThread().isInterrupted()) {
+                masterGrpcService.testGetData(workerConfigInfo);
+                testCaseStatistics.registerSuccessRequest();
+                try {
+                    Thread.sleep(3);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            log.info("thread finished");
+        }
 
     }
 

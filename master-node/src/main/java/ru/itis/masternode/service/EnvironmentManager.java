@@ -52,26 +52,43 @@ public class EnvironmentManager {
         dockerClient.createNetworkCmd().withName(workerConfiguration.network).exec();
     }
 
-    public String requireNodesChain(int nodeChainSize) throws InterruptedException {
-        if (nodeChainSize > nodes.size()) {
-            createNodes(nodeChainSize - nodes.size());
-            Thread.sleep(5000); // starting spring on node
-        }
+    public String requireNodesChainGrpc(int nodeChainSize) {
+        requireNodesChain(nodeChainSize);
 
-        return "http://127.0.0.1:" + nodeToConnect.targetPort;
+        return "static://127.0.0.1:" + nodeToConnect.targetGrpcPort;
+    }
+
+    public String requireNodesChainRest(int nodeChainSize) {
+        requireNodesChain(nodeChainSize);
+
+        return "http://127.0.0.1:" + nodeToConnect.targetRestPort;
+    }
+
+    private void requireNodesChain(int nodeChainSize) {
+        try {
+            if (nodeChainSize > nodes.size()) {
+                createNodes(nodeChainSize - nodes.size());
+                Thread.sleep(5000); // starting spring on node
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void createNodes(int count) throws InterruptedException {
         for (int i = 0; i < count; i++) {
             if (!Thread.currentThread().isInterrupted()) {
                 WorkerNode workerNode = WorkerNode.builder()
-                        .exposedPort(workerConfiguration.exposedPort)
-                        .targetPort(++nextAvailablePort)
+                        .exposedRestPort(workerConfiguration.exposedRestPort)
+                        .targetRestPort(++nextAvailablePort)
+                        .exposedGrpcPort(workerConfiguration.exposedGrpcPort)
+                        .targetGrpcPort(nextAvailablePort * 2)
                         .build();
 
                 if (nodeToConnect != null) {
                     workerNode.setNextNodeIp(nodeToConnect.internalIp);
-                    workerNode.setNextNodePort(nodeToConnect.exposedPort);
+                    workerNode.setNextNodeRestPort(nodeToConnect.exposedRestPort);
+                    workerNode.setNextNodeGrpcPort(nodeToConnect.exposedGrpcPort);
                 }
 
                 String internalIp = createNode(workerNode);
@@ -87,8 +104,10 @@ public class EnvironmentManager {
 
     private String createNode(WorkerNode workerNode) {
         Ports portBindings = new Ports();
-        portBindings.bind(ExposedPort.tcp(workerNode.exposedPort),
-                Ports.Binding.bindPort(workerNode.targetPort));
+        portBindings.bind(ExposedPort.tcp(workerNode.exposedRestPort),
+                Ports.Binding.bindPort(workerNode.targetRestPort));
+        portBindings.bind(ExposedPort.tcp(workerNode.exposedGrpcPort),
+                Ports.Binding.bindPort(workerNode.targetGrpcPort));
 
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withPortBindings(portBindings)
@@ -97,7 +116,9 @@ public class EnvironmentManager {
         CreateContainerResponse container = dockerClient.createContainerCmd(
                         workerConfiguration.image)
                 .withEnv(List.of("HOST=http://" + workerNode.nextNodeIp + ":"
-                        + workerNode.nextNodePort))
+                        + workerNode.nextNodeRestPort))
+                .withEnv(List.of("GRPC_HOST=static://" + workerNode.nextNodeIp + ":"
+                        + workerNode.nextNodeGrpcPort))
                 .withHostConfig(hostConfig)
                 .exec();
 
@@ -121,15 +142,20 @@ public class EnvironmentManager {
 
         private String id;
 
-        private Integer targetPort;
+        private Integer targetRestPort;
 
-        private Integer exposedPort;
+        private Integer exposedRestPort;
+
+        private Integer targetGrpcPort;
+
+        private Integer exposedGrpcPort;
 
         private String internalIp;
 
         private String nextNodeIp;
 
-        private Integer nextNodePort;
+        private Integer nextNodeRestPort;
+        private Integer nextNodeGrpcPort;
 
     }
 
