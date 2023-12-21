@@ -6,11 +6,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,13 +26,18 @@ public class TestCaseStatistics {
     private final ScheduledExecutorService tasksExecutor = Executors.newScheduledThreadPool(1);
 
     private final TestCase testCase;
+
     private final AtomicInteger secondsToRun;
+
+    private final String type;
 
     private volatile boolean isStarted = false;
 
+
     private final List<StatisticsPerSecond> statisticsPerSecond = new ArrayList<>();
 
-    public TestCaseStatistics(TestCase testCase, int seconds) {
+    public TestCaseStatistics(TestCase testCase, int seconds, String type) {
+        this.type = type;
         this.testCase = testCase;
         this.secondsToRun = new AtomicInteger(seconds);
     }
@@ -47,7 +50,7 @@ public class TestCaseStatistics {
         isStarted = true;
 
         tasksExecutor.scheduleAtFixedRate(new UpdatePeriodicalStatsTask(), 1000, 1000,
-                        TimeUnit.MILLISECONDS);
+                TimeUnit.MILLISECONDS);
     }
 
     public void registerSuccessRequest() {
@@ -60,6 +63,10 @@ public class TestCaseStatistics {
 
     public StatisticsSummary get() {
         return new StatisticsSummary(statisticsPerSecond);
+    }
+
+    public void stop() {
+        tasksExecutor.shutdownNow();
     }
 
     @AllArgsConstructor
@@ -79,7 +86,7 @@ public class TestCaseStatistics {
                 StatisticsPerSecond statPerSecond = new StatisticsPerSecond(pastSeconds,
                         requestsPerSecond.get(),
                         averageRequestsPerSecond.get(), totalRequestsCount.get(),
-                        testCase.getId().toString());
+                        testCase.getId().toString(), type);
 
                 statisticsPerSecond.add(statPerSecond);
                 sendToFirebase(statPerSecond);

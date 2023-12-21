@@ -21,5 +21,6 @@ public final class StatisticsPerSecond {
 
     private String testCaseId;
 
+    private String type;
 
 }

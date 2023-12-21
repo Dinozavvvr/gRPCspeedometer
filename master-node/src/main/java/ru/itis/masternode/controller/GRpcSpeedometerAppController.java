@@ -29,8 +29,13 @@ public class GRpcSpeedometerAppController {
         return ResponseEntity.ok(gRpcSpeedometerAppService.getAllTests());
     }
 
+    @GetMapping("/{testCaseId}")
+    public ResponseEntity<?> getTest(@PathVariable UUID testCaseId) {
+        return ResponseEntity.ok(gRpcSpeedometerAppService.getTest(testCaseId));
+    }
 
-    @PostMapping("/stop/{testCaseId}")
+
+    @PostMapping("/{testCaseId}/stop")
     public ResponseEntity<?> stop(@PathVariable UUID testCaseId) {
         gRpcSpeedometerAppService.stopTest(testCaseId);
 
