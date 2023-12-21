@@ -102,11 +102,27 @@ public class TestCaseRunner {
         }
 
         public void runInternal() {
-            log.info("[{}] Test case execution started", currentTestCase.getId());
-            String workerHost = createContainer();
-            currentTestCase.setRestStatistics(startPublisherRestThreads(workerHost));
-            log.info("[{}] Test case execution finished", currentTestCase.getId());
-            successCallback().accept(currentTestCase);
+            try {
+                log.info("[{}] Test case REST execution started", currentTestCase.getId());
+                String workerHost = createContainer();
+
+                TestCaseStatistics testCaseRestStatistics = new TestCaseStatistics(
+                        currentTestCase, currentTestCase.getWorkTime(), "REST");
+                startPublisherRestThreads(workerHost, testCaseRestStatistics);
+
+                log.info("[{}] Test case REST execution finished", currentTestCase.getId());
+                log.info("[{}] Test case gRPC execution started", currentTestCase.getId());
+
+                TestCaseStatistics testCaseGrpcStatistics = new TestCaseStatistics(
+                        currentTestCase, currentTestCase.getWorkTime(), "REST");
+
+                startPublisherGrpcThreads(workerHost, testCaseGrpcStatistics);
+                log.info("[{}] Test case gRPC execution finished", currentTestCase.getId());
+                successCallback().accept(currentTestCase);
+            } catch (InterruptedException e) {
+                log.info("[{}] Test case execution aborted", currentTestCase.getId());
+                stoppingCallback().accept(currentTestCase);
+            }
         }
 
         private String createContainer() {
@@ -120,9 +136,8 @@ public class TestCaseRunner {
             }
         }
 
-        private StatisticsSummary startPublisherRestThreads(String workerHost) {
-            TestCaseStatistics testCaseStatistics = new TestCaseStatistics(
-                    currentTestCase, currentTestCase.getWorkTime(), "REST");
+        private void startPublisherRestThreads(String workerHost,
+                TestCaseStatistics testCaseStatistics) throws InterruptedException {
 
             List<Thread> publisherThreads = new ArrayList<>();
             long delayPerThread = 50;
@@ -148,15 +163,53 @@ public class TestCaseRunner {
             this.runningThreads = publisherThreads;
             try {
                 sequenceThreadExecutor.execute(delayPerThread);
+
                 testCaseStatistics.start();
                 Thread.sleep(currentTestCase.getWorkTime() * 1000L + 1000);
-                stopRunning();
-            } catch (InterruptedException e) {
+                testCaseStatistics.stop();
+
+            } finally {
                 testCaseStatistics.stop();
                 stopRunning();
-                stoppingCallback().accept(currentTestCase);
+                currentTestCase.setRestStatistics(testCaseStatistics.get());
             }
-            return testCaseStatistics.get();
+        }
+
+        private void startPublisherGrpcThreads(String workerHost,
+                TestCaseStatistics testCaseStatistics) throws InterruptedException {
+
+            List<Thread> publisherThreads = new ArrayList<>();
+            long delayPerThread = 50;
+
+            for (int i = 0; i < currentTestCase.getThreadsCount(); i++) {
+                AbstractRequestPublisher abstractRequestPublisher;
+
+                if (currentTestCase.getRequestMethod().equals(RequestMethod.GET)) {
+                    abstractRequestPublisher = new RestApiGetRequestPublisher(
+                            currentTestCase, workerHost, testCaseStatistics
+                    );
+                } else {
+                    abstractRequestPublisher = new RestApiPostRequestPublisher(
+                            currentTestCase, workerHost, testCaseStatistics);
+                }
+                Thread thread = new Thread(abstractRequestPublisher);
+                publisherThreads.add(thread);
+            }
+
+            SequenceThreadExecutor sequenceThreadExecutor = new SequenceThreadExecutor(
+                    publisherThreads);
+
+            this.runningThreads = publisherThreads;
+            try {
+                sequenceThreadExecutor.execute(delayPerThread);
+
+                testCaseStatistics.start();
+                Thread.sleep(currentTestCase.getWorkTime() * 1000L + 1000);
+            } finally {
+                testCaseStatistics.stop();
+                stopRunning();
+                currentTestCase.setGrpcStatistics(testCaseStatistics.get());
+            }
         }
 
         public synchronized void stopRunning() {
