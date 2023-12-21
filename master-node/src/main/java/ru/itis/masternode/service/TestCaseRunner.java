@@ -4,8 +4,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -39,15 +37,17 @@ public class TestCaseRunner {
 
     private TestCaseRunnerThread testCaseRunnerThread;
 
-    private final Consumer<TestCase> stoppingCallback = testCase -> {
-        synchronized (this) {
-            testCase.setState(TestCaseState.ABORTED);
-            this.currentTestCase = null;
-            this.testCaseRunnerThread = null;
-            this.changeState(RunnerState.WAITING_TASK);
-            this.notifyAll();
-        }
-    };
+    private final Consumer<TestCase> stoppingCallback() {
+        return testCase -> {
+            synchronized (this) {
+                testCase.setState(TestCaseState.ABORTED);
+                testCaseService.updateTestCase(testCase);
+                this.currentTestCase = null;
+                this.changeState(RunnerState.WAITING_TASK);
+                this.notifyAll();
+            }
+        };
+    }
 
     public Consumer<TestCase> successCallback() {
         return testCase -> {
@@ -55,27 +55,23 @@ public class TestCaseRunner {
                 testCase.setState(TestCaseState.FINISHED);
                 testCaseService.updateTestCase(testCase);
                 this.currentTestCase = null;
-                this.testCaseRunnerThread = null;
                 this.changeState(RunnerState.WAITING_TASK);
                 this.notifyAll();
             }
         };
     }
 
-    public void run(TestCase testCase) throws IllegalStateException {
-        synchronized (this) {
-            if (!isAvailable()) {
-                throw new IllegalStateException("Scheduler is not available to accept test cases");
-            }
+    public synchronized void run(TestCase testCase)
+            throws IllegalStateException, InterruptedException {
+        if (!isAvailable()) {
+            this.wait();
         }
-
         this.currentTestCase = testCase;
         changeState(RunnerState.PREPARING);
 
         log.info("[{}] Starting TestCaseRunnerThread for test ... ", testCase.getId());
-        this.testCaseRunnerThread = new TestCaseRunnerThread(this,
-                testCase, testCaseService, stoppingCallback, successCallback(), stoppingCallback);
-        new Thread(testCaseRunnerThread).start();
+        this.testCaseRunnerThread = new TestCaseRunnerThread();
+        this.testCaseRunnerThread.start();
         log.info("[{}] TestCaseRunnerThread for test case started", testCase.getId());
     }
 
@@ -83,7 +79,6 @@ public class TestCaseRunner {
         if (currentTestCase == null) {
             throw new IllegalArgumentException("No active test case to stop");
         }
-        this.testCaseRunnerThread.stopRunning(true);
         this.testCaseRunnerThread.interrupt();
     }
 
@@ -96,48 +91,28 @@ public class TestCaseRunner {
     }
 
     @RequiredArgsConstructor
-    public static class TestCaseRunnerThread extends Thread {
-
-        private final TestCaseRunner testCaseRunner;
-
-        private final TestCase testCase;
-
-        private final TestCaseService testCaseService;
-
-        private final Consumer<TestCase> stoppingCallback;
-
-        private final Consumer<TestCase> successCallback;
-
-        private final Consumer<TestCase> errorCallback;
+    public class TestCaseRunnerThread extends Thread {
 
         private List<Thread> runningThreads;
 
         @Override
         public void run() {
             Thread.currentThread().setPriority(MAX_PRIORITY);
-            try {
-                log.info("[{}] Test case execution started", testCase.getId());
-                runInternal();
-                successCallback.accept(testCase);
-                log.info("[{}] Test case execution finished", testCase.getId());
-            } catch (Exception e) {
-                log.info("[{}] Test case execution aborted", testCase.getId());
-                errorCallback.accept(testCase);
-            }
+            runInternal();
         }
 
         public void runInternal() {
+            log.info("[{}] Test case execution started", currentTestCase.getId());
             String workerHost = createContainer();
-
-            testCase.setState(TestCaseState.RUNNING);
-            testCaseService.saveTestCase(testCase);
-            testCase.setRestStatistics(startPublisherRestThreads(workerHost));
+            currentTestCase.setRestStatistics(startPublisherRestThreads(workerHost));
+            log.info("[{}] Test case execution finished", currentTestCase.getId());
+            successCallback().accept(currentTestCase);
         }
 
         private String createContainer() {
             try {
-                return testCaseRunner.environmentManager.requireNodesChain(
-                        testCase.getRequestDepth());
+                return environmentManager.requireNodesChain(
+                        currentTestCase.getRequestDepth());
             } catch (InterruptedException e) {
                 log.info("Interrupted during container creating process");
                 Thread.currentThread().interrupt();
@@ -146,21 +121,22 @@ public class TestCaseRunner {
         }
 
         private StatisticsSummary startPublisherRestThreads(String workerHost) {
-            TestCaseStatistics testCaseStatistics = new TestCaseStatistics(testCase, testCase.getWorkTime());
+            TestCaseStatistics testCaseStatistics = new TestCaseStatistics(
+                    currentTestCase, currentTestCase.getWorkTime(), "REST");
 
             List<Thread> publisherThreads = new ArrayList<>();
             long delayPerThread = 50;
 
-            for (int i = 0; i < testCase.getThreadsCount(); i++) {
+            for (int i = 0; i < currentTestCase.getThreadsCount(); i++) {
                 AbstractRequestPublisher abstractRequestPublisher;
 
-                if (testCase.getRequestMethod().equals(RequestMethod.GET)) {
+                if (currentTestCase.getRequestMethod().equals(RequestMethod.GET)) {
                     abstractRequestPublisher = new RestApiGetRequestPublisher(
-                            testCase, workerHost, testCaseStatistics
+                            currentTestCase, workerHost, testCaseStatistics
                     );
                 } else {
                     abstractRequestPublisher = new RestApiPostRequestPublisher(
-                            testCase, workerHost, testCaseStatistics);
+                            currentTestCase, workerHost, testCaseStatistics);
                 }
                 Thread thread = new Thread(abstractRequestPublisher);
                 publisherThreads.add(thread);
@@ -170,26 +146,21 @@ public class TestCaseRunner {
                     publisherThreads);
 
             this.runningThreads = publisherThreads;
-            StatisticsSummary statisticsSummary;
             try {
                 sequenceThreadExecutor.execute(delayPerThread);
                 testCaseStatistics.start();
-                Thread.sleep(testCase.getWorkTime() * 1000L + 1000);
-                statisticsSummary = testCaseStatistics.get();
-
+                Thread.sleep(currentTestCase.getWorkTime() * 1000L + 1000);
+                stopRunning();
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                testCaseStatistics.stop();
+                stopRunning();
+                stoppingCallback().accept(currentTestCase);
             }
-            stopRunning(false);
-            return statisticsSummary;
+            return testCaseStatistics.get();
         }
 
-        public synchronized void stopRunning(Boolean interrupted) {
+        public synchronized void stopRunning() {
             runningThreads.forEach(Thread::interrupt);
-
-            if (interrupted) {
-                this.stoppingCallback.accept(testCase);
-            }
         }
 
     }
@@ -236,7 +207,9 @@ public class TestCaseRunner {
                 .date(LocalDate.now())
                 .height(5.5)
                 .build();
+
         private final WebClient webClient;
+
         private final WorkerConfigInfo workerConfigInfo;
 
         public RestApiPostRequestPublisher(TestCase testCase, String workerHost,

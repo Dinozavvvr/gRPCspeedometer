@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
@@ -18,9 +19,12 @@ import ru.itis.masternode.model.enums.RequestMethod;
 import ru.itis.workernode.emumeration.FlowType;
 
 @Service
+@RequiredArgsConstructor
 public class TestCaseService {
 
     private final String TEST_CASES = "test-cases";
+
+    private final TestCaseStatsService testCaseStatsService;
 
     @SneakyThrows
     public TestCase getTestCase(UUID testCaseId) {
@@ -31,6 +35,8 @@ public class TestCaseService {
 
         if (testCase != null) {
             testCase.setId(testCaseId);
+            testCase.setRestStatistics(testCaseStatsService.getRestStatsForTestCase(testCaseId));
+            testCase.setGrpcStatistics(testCaseStatsService.getGrpcStatsForTestCase(testCaseId));
         }
 
         return testCase;
@@ -64,6 +70,7 @@ public class TestCaseService {
                 .create(TestCaseFirebaseEntity.fromTestCase(testCase));
     }
 
+    @SneakyThrows
     public void updateTestCase(TestCase testCase) {
         FirestoreClient.getFirestore().collection(TEST_CASES)
                 .document(testCase.getId().toString())

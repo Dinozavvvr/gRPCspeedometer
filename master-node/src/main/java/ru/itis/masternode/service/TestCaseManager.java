@@ -59,10 +59,7 @@ public class TestCaseManager {
         TestCaseState testCaseState = testCaseService.getTestCase(testCaseId).getState();
 
         switch (testCaseState) {
-            case PREPARING:
             case RUNNING: testCaseRunner.stopTestCase();
-                break;
-            case PENDING: testCaseManagerQueueListenerThread.stopPending();
                 break;
             case WAITING:
                     testsCaseQueue.stream().filter(testCase -> testCase.getId() == testCaseId)
@@ -92,26 +89,11 @@ public class TestCaseManager {
                     testCasePendingThread = null;
                     TestCase testCase = testCaseManager.testsCaseQueue.take();
 
-                    var pendingThread = new TestCaseManagerPendingThread(
-                            testCaseManager.testCaseRunner, testCase);
-                    var futureTask = new FutureTask<>(pendingThread);
-
-                    testCasePendingThread = new Thread(futureTask);
-
-                    testCasePendingThread.start();
-                    testCase.setState(TestCaseState.PENDING);
+                    testCaseManager.testCaseRunner.run(testCase);
+                    testCase.setState(TestCaseState.RUNNING);
                     testCaseManager.testCaseService.updateTestCase(testCase);
-                    log.info("[{}] Pending test case ... ", testCase.getId());
-
-                    if (futureTask.get()) {
-                        log.info("[{}] Test case accepted by runner ", testCase.getId());
-                        testCase.setState(TestCaseState.PREPARING);
-                    } else {
-                        log.error("[{}] Test case aborted ", testCase);
-                        testCase.setState(TestCaseState.ABORTED);
-                    }
-                    testCaseManager.testCaseService.updateTestCase(testCase);
-                } catch (InterruptedException | ExecutionException e) {
+                    log.info("[{}] Test case started ", testCase.getId());
+                } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
             }
@@ -120,31 +102,6 @@ public class TestCaseManager {
         private synchronized void stopPending() {
             if (testCasePendingThread != null) {
                 testCasePendingThread.interrupt();
-            }
-        }
-
-    }
-
-    @RequiredArgsConstructor
-    public static class TestCaseManagerPendingThread implements Callable<Boolean> {
-
-        private final TestCaseRunner testCaseRunner;
-
-        private final TestCase testCase;
-
-        @Override
-        public Boolean call() {
-            try {
-                while (!testCaseRunner.isAvailable()) {
-                    synchronized (testCaseRunner) {
-                        testCaseRunner.wait();
-                    }
-                }
-                testCaseRunner.run(testCase);
-                return true;
-            } catch (InterruptedException e) {
-                log.info("[{}] Canceling pending test ", testCase);
-                return false;
             }
         }
 
