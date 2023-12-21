@@ -8,7 +8,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -25,62 +28,67 @@ public class TestCaseStatistics {
     private final ScheduledExecutorService tasksExecutor = Executors.newScheduledThreadPool(1);
 
     private final TestCase testCase;
+    private final AtomicInteger secondsToRun;
 
-    private boolean isStarted = false;
-
-    private ScheduledFuture<?> updatePeriodicalTaskFuture;
+    private volatile boolean isStarted = false;
 
     private final List<StatisticsPerSecond> statisticsPerSecond = new ArrayList<>();
 
-    public TestCaseStatistics(TestCase testCase) {
+    public TestCaseStatistics(TestCase testCase, int seconds) {
         this.testCase = testCase;
+        this.secondsToRun = new AtomicInteger(seconds);
     }
 
-    public void start(long delay) {
+    public void start() {
         if (isStarted) {
             throw new IllegalStateException("TestCaseStatistics already have been started");
         }
 
-        updatePeriodicalTaskFuture = tasksExecutor
-                .scheduleAtFixedRate(new UpdatePeriodicalStatsTask(), delay, 1000,
-                        TimeUnit.MILLISECONDS);
         isStarted = true;
+
+        tasksExecutor.scheduleAtFixedRate(new UpdatePeriodicalStatsTask(), 1000, 1000,
+                        TimeUnit.MILLISECONDS);
     }
 
     public void registerSuccessRequest() {
-        totalRequestsCount.incrementAndGet();
-        requestsPerSecond.incrementAndGet();
+        if (isStarted) {
+            totalRequestsCount.incrementAndGet();
+            requestsPerSecond.incrementAndGet();
+        }
     }
 
 
-    public StatisticsSummary stop() {
-        updatePeriodicalTaskFuture.cancel(true);
-        tasksExecutor.shutdownNow();
-
+    public StatisticsSummary get() {
         return new StatisticsSummary(statisticsPerSecond);
     }
 
+    @AllArgsConstructor
     private class UpdatePeriodicalStatsTask implements Runnable {
 
         @Override
         public void run() {
-            long pastSeconds = pastSecondsCount.incrementAndGet();
-            averageRequestsPerSecond.set((totalRequestsCount.get() / pastSeconds));
+            if (secondsToRun.get() > 0) {
+                long pastSeconds = pastSecondsCount.incrementAndGet();
+                averageRequestsPerSecond.set((totalRequestsCount.get() / pastSeconds));
 
-            log.info("------------------------");
-            log.info("second: {} ", pastSeconds);
-            log.info("total req count: {} ", totalRequestsCount.get());
-            log.info("req per second: {} ", requestsPerSecond.get());
+                log.info("------------------------");
+                log.info("second: {} ", pastSeconds);
+                log.info("total req count: {} ", totalRequestsCount.get());
+                log.info("req per second: {} ", requestsPerSecond.get());
 
-            StatisticsPerSecond statPerSecond = new StatisticsPerSecond(pastSeconds,
-                    requestsPerSecond.get(),
-                    averageRequestsPerSecond.get(), totalRequestsCount.get(),
-                    testCase.getId().toString());
+                StatisticsPerSecond statPerSecond = new StatisticsPerSecond(pastSeconds,
+                        requestsPerSecond.get(),
+                        averageRequestsPerSecond.get(), totalRequestsCount.get(),
+                        testCase.getId().toString());
 
-            statisticsPerSecond.add(statPerSecond);
-            sendToFirebase(statPerSecond);
+                statisticsPerSecond.add(statPerSecond);
+                sendToFirebase(statPerSecond);
 
-            requestsPerSecond.set(0);
+                requestsPerSecond.set(0);
+                secondsToRun.decrementAndGet();
+            } else {
+                tasksExecutor.shutdownNow();
+            }
         }
 
     }

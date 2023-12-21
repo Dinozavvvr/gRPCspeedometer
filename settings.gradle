@@ -1,5 +1,4 @@
 rootProject.name = 'gRPCspeedometer'
-include 'master-node'
-include 'worker-node'
-include 'reports'
-include 'scheduler'
+include ':worker-node'
+include ':master-node'
+include ':reports'

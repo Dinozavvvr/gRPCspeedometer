@@ -6,7 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.itis.masternode.model.TestCaseState;
-import ru.itis.masternode.model.TestConfig;
 import ru.itis.masternode.model.enums.RequestMethod;
 import ru.itis.workernode.emumeration.FlowType;
 

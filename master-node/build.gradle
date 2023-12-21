@@ -27,9 +27,9 @@ dependencies {
     implementation 'com.github.docker-java:docker-java-transport-httpclient5:3.3.4'
     implementation 'org.apache.httpcomponents.client5:httpclient5:5.2.1'
     implementation 'com.google.firebase:firebase-admin:9.2.0'
-    implementation project(':worker-node')
 
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation project(':worker-node')
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 

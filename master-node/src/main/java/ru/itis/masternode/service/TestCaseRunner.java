@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+
+import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -39,6 +41,7 @@ public class TestCaseRunner {
 
     private final Consumer<TestCase> stoppingCallback = testCase -> {
         synchronized (this) {
+            testCase.setState(TestCaseState.ABORTED);
             this.currentTestCase = null;
             this.testCaseRunnerThread = null;
             this.changeState(RunnerState.WAITING_TASK);
@@ -71,7 +74,7 @@ public class TestCaseRunner {
 
         log.info("[{}] Starting TestCaseRunnerThread for test ... ", testCase.getId());
         this.testCaseRunnerThread = new TestCaseRunnerThread(this,
-                testCase, stoppingCallback, successCallback(), stoppingCallback);
+                testCase, testCaseService, stoppingCallback, successCallback(), stoppingCallback);
         new Thread(testCaseRunnerThread).start();
         log.info("[{}] TestCaseRunnerThread for test case started", testCase.getId());
     }
@@ -80,7 +83,8 @@ public class TestCaseRunner {
         if (currentTestCase == null) {
             throw new IllegalArgumentException("No active test case to stop");
         }
-        this.testCaseRunnerThread.stop();
+        this.testCaseRunnerThread.stopRunning(true);
+        this.testCaseRunnerThread.interrupt();
     }
 
     public synchronized boolean isAvailable() {
@@ -92,13 +96,13 @@ public class TestCaseRunner {
     }
 
     @RequiredArgsConstructor
-    public static class TestCaseRunnerThread implements Runnable {
-
-        private volatile boolean interrupted = false;
+    public static class TestCaseRunnerThread extends Thread {
 
         private final TestCaseRunner testCaseRunner;
 
         private final TestCase testCase;
+
+        private final TestCaseService testCaseService;
 
         private final Consumer<TestCase> stoppingCallback;
 
@@ -106,8 +110,11 @@ public class TestCaseRunner {
 
         private final Consumer<TestCase> errorCallback;
 
+        private List<Thread> runningThreads;
+
         @Override
         public void run() {
+            Thread.currentThread().setPriority(MAX_PRIORITY);
             try {
                 log.info("[{}] Test case execution started", testCase.getId());
                 runInternal();
@@ -122,6 +129,8 @@ public class TestCaseRunner {
         public void runInternal() {
             String workerHost = createContainer();
 
+            testCase.setState(TestCaseState.RUNNING);
+            testCaseService.saveTestCase(testCase);
             testCase.setRestStatistics(startPublisherRestThreads(workerHost));
         }
 
@@ -137,25 +146,21 @@ public class TestCaseRunner {
         }
 
         private StatisticsSummary startPublisherRestThreads(String workerHost) {
-            TestCaseStatistics testCaseStatistics = new TestCaseStatistics(testCase);
+            TestCaseStatistics testCaseStatistics = new TestCaseStatistics(testCase, testCase.getWorkTime());
 
             List<Thread> publisherThreads = new ArrayList<>();
-            long delayPerThread = 10;
-
-            long threadStopTime = System.currentTimeMillis() +      // current time
-                    testCase.getWorkTime() * 1000L                  // work time millis
-                    + delayPerThread * testCase.getThreadsCount();  // delay of last thread
+            long delayPerThread = 50;
 
             for (int i = 0; i < testCase.getThreadsCount(); i++) {
                 AbstractRequestPublisher abstractRequestPublisher;
 
                 if (testCase.getRequestMethod().equals(RequestMethod.GET)) {
                     abstractRequestPublisher = new RestApiGetRequestPublisher(
-                            testCase, workerHost, testCaseStatistics, threadStopTime
+                            testCase, workerHost, testCaseStatistics
                     );
                 } else {
                     abstractRequestPublisher = new RestApiPostRequestPublisher(
-                            testCase, workerHost, testCaseStatistics, threadStopTime);
+                            testCase, workerHost, testCaseStatistics);
                 }
                 Thread thread = new Thread(abstractRequestPublisher);
                 publisherThreads.add(thread);
@@ -163,28 +168,28 @@ public class TestCaseRunner {
 
             SequenceThreadExecutor sequenceThreadExecutor = new SequenceThreadExecutor(
                     publisherThreads);
+
+            this.runningThreads = publisherThreads;
+            StatisticsSummary statisticsSummary;
             try {
                 sequenceThreadExecutor.execute(delayPerThread);
-                testCaseStatistics.start(delayPerThread * publisherThreads.size());
+                testCaseStatistics.start();
+                Thread.sleep(testCase.getWorkTime() * 1000L + 1000);
+                statisticsSummary = testCaseStatistics.get();
+
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return testCaseStatistics.stop();
+                throw new RuntimeException(e);
             }
-
-            for (Thread publisherThread : publisherThreads) {
-                try {
-                    publisherThread.join();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return testCaseStatistics.stop();
-                }
-            }
-
-            return testCaseStatistics.stop();
+            stopRunning(false);
+            return statisticsSummary;
         }
 
-        public synchronized void stop() {
-            this.interrupted = true;
+        public synchronized void stopRunning(Boolean interrupted) {
+            runningThreads.forEach(Thread::interrupt);
+
+            if (interrupted) {
+                this.stoppingCallback.accept(testCase);
+            }
         }
 
     }
@@ -214,21 +219,9 @@ public class TestCaseRunner {
     @RequiredArgsConstructor
     public static abstract class AbstractRequestPublisher implements Runnable {
 
-        protected volatile boolean interrupted = false;
-
         protected final TestCaseStatistics testCaseStatistics;
 
-        protected final Long autoStopAtTime;
-
         protected final TestCase testCase;
-
-        protected synchronized boolean isInterrupted() {
-            return interrupted;
-        }
-
-        protected synchronized void stop() {
-            this.interrupted = true;
-        }
 
     }
 
@@ -247,8 +240,8 @@ public class TestCaseRunner {
         private final WorkerConfigInfo workerConfigInfo;
 
         public RestApiPostRequestPublisher(TestCase testCase, String workerHost,
-                TestCaseStatistics testCaseStatistics, Long autoStopAtTime) {
-            super(testCaseStatistics, autoStopAtTime, testCase);
+                TestCaseStatistics testCaseStatistics) {
+            super(testCaseStatistics, testCase);
 
             List<ExampleData> data = new ArrayList<>();
             for (int i = 0; i < testCase.getRequestDepth() * testCase.getRequestBodySize(); i++) {
@@ -264,14 +257,20 @@ public class TestCaseRunner {
                     .data(data)
                     .build();
 
+            ConnectionProvider client = ConnectionProvider.builder("custom")
+                    .pendingAcquireMaxCount(3000).build();
+
             this.webClient = WebClient.builder()
                     .baseUrl(workerHost)
+                    .clientConnector(new ReactorClientHttpConnector(HttpClient.create(client)))
+                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .build();
         }
 
         @Override
         public void run() {
-            while (!isInterrupted() && autoStopAtTime > System.currentTimeMillis()) {
+            log.info("thread started");
+            while (!Thread.currentThread().isInterrupted()) {
                 webClient.post().uri("/worker/rest")
                         .bodyValue(workerConfigInfo)
                         .retrieve()
@@ -279,11 +278,13 @@ public class TestCaseRunner {
                         .doOnNext(response -> testCaseStatistics.registerSuccessRequest())
                         .subscribe();
                 try {
-                    Thread.sleep(5);
+                    Thread.sleep(3);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    break;
                 }
             }
+            log.info("thread finished");
         }
 
     }
@@ -295,8 +296,8 @@ public class TestCaseRunner {
         private final String getUri;
 
         public RestApiGetRequestPublisher(TestCase testCase, String workerHost,
-                TestCaseStatistics testCaseStatistics, Long autoStopAtTime) {
-            super(testCaseStatistics, autoStopAtTime, testCase);
+                TestCaseStatistics testCaseStatistics) {
+            super(testCaseStatistics, testCase);
 
             ConnectionProvider client = ConnectionProvider.builder("custom")
                     .pendingAcquireMaxCount(3000).build();
@@ -311,16 +312,17 @@ public class TestCaseRunner {
 
         @Override
         public void run() {
-            while (!isInterrupted() && autoStopAtTime > System.currentTimeMillis()) {
+            while (!Thread.currentThread().isInterrupted()) {
                 webClient.get().uri(getUri)
                         .retrieve()
                         .bodyToMono(Object.class)
                         .doOnSuccess(response -> testCaseStatistics.registerSuccessRequest())
                         .subscribe();
                 try {
-                    Thread.sleep(5);
+                    Thread.sleep(3);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    break;
                 }
             }
         }
@@ -329,7 +331,8 @@ public class TestCaseRunner {
 
     private enum RunnerState {
         WAITING_TASK,
-        PREPARING
+        PREPARING,
+        RUNNING
     }
 
     private static String buildGetUri(TestCase testCase) {

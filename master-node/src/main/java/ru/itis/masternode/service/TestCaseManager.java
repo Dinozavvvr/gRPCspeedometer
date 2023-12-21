@@ -59,9 +59,12 @@ public class TestCaseManager {
         TestCaseState testCaseState = testCaseService.getTestCase(testCaseId).getState();
 
         switch (testCaseState) {
-            case PREPARING -> testCaseRunner.stopTestCase();
-            case PENDING -> testCaseManagerQueueListenerThread.stopPending();
-            case WAITING ->
+            case PREPARING:
+            case RUNNING: testCaseRunner.stopTestCase();
+                break;
+            case PENDING: testCaseManagerQueueListenerThread.stopPending();
+                break;
+            case WAITING:
                     testsCaseQueue.stream().filter(testCase -> testCase.getId() == testCaseId)
                             .forEach(testsCaseQueue::remove);
         }
