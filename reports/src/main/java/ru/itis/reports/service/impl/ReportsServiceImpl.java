@@ -1,7 +1,10 @@
 package ru.itis.reports.service.impl;
 
 
+import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
 import ru.itis.reports.model.StatisticsPerSecond;
 import ru.itis.reports.model.StatisticsSummary;
 import ru.itis.reports.model.TestCase;
@@ -12,13 +15,14 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 
-
+@Service
+@RequiredArgsConstructor
 public class ReportsServiceImpl implements ReportsService {
     @Override
-    public void downloadExcel(TestCase testCase, StatisticsSummary rest, StatisticsSummary grpc) {
+    public ResponseEntity<byte[]> downloadExcel(TestCase testCase, StatisticsSummary rest, StatisticsSummary grpc) {
 
-        Workbook wb = new XSSFWorkbook();
-        try  (OutputStream fileOut = new FileOutputStream("workbook.xls")) {
+        try (Workbook wb = new XSSFWorkbook();
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             Sheet sheet = wb.createSheet("Статистика");
             int row = 0;
 
@@ -35,8 +39,12 @@ public class ReportsServiceImpl implements ReportsService {
                 fillCellsWithStatistics(difference, 10, rowTemp, i);
             }
 
-            wb.write(fileOut);
+            wb.write(outputStream);
+            byte[] data = outputStream.toByteArray();
 
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=" + testCase.getId().toString() + ".xls\"")
+                    .body(data);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
