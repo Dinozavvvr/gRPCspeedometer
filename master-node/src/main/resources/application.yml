@@ -1,0 +1,16 @@
+server:
+  port: 9999
+
+spring:
+  application:
+    name: master-client
+
+grpc:
+  server:
+    port: 9091
+  client:
+    master-client:
+      address: static://127.0.0.1:9090
+      enableKeepAlive: true
+      keepAliveWithoutCalls: true
+      negotiationType: plaintext
