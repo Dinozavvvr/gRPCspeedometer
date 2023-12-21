@@ -1,4 +1,4 @@
-package ru.itis.masternode.model;
+package ru.itis.masternode.service;
 
 import com.google.firebase.cloud.FirestoreClient;
 import java.util.ArrayList;
@@ -11,6 +11,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ru.itis.masternode.model.StatisticsPerSecond;
+import ru.itis.masternode.model.StatisticsSummary;
+import ru.itis.masternode.model.TestCase;
 
 @Slf4j
 public class TestCaseStatistics {
@@ -81,6 +84,7 @@ public class TestCaseStatistics {
                 log.info("------------------------");
                 log.info("second: {} ", pastSeconds);
                 log.info("total req count: {} ", totalRequestsCount.get());
+                log.info("avg req per second: {} ", averageRequestsPerSecond.get());
                 log.info("req per second: {} ", requestsPerSecond.get());
 
                 StatisticsPerSecond statPerSecond = new StatisticsPerSecond(pastSeconds,
