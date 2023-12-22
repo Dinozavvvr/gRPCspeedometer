@@ -15,11 +15,11 @@ docker build -t worker .
 ## Usage
 Ниже перечислен список основных эндпоинтов master-node
 
-- http://localhost:9999/grpc-speedometer/tests/start - запускает процесс тестирования, возвращает uuid теста.
-- http://localhost:9999/grpc-speedometer/tests - возвращает последние 10 запущенных тестов.
-- http://localhost:9999/grpc-speedometer/tests/{testCaseId} - возвращает информацию о тесте по testCaseId.
-- http://localhost:9999/grpc-speedometer/tests/{testCaseId}/stop - прерывает работу теста по testCaseId не дожидаясь полного выполнения.
-- http://localhost:9999/grpc-speedometer/tests/{testCaseId}/report - формирует отчет по результатам тестирования теста по testCaseId в виде excel файла. 
+- /grpc-speedometer/tests/start - запускает процесс тестирования, возвращает uuid теста.
+- /grpc-speedometer/tests - возвращает последние 10 запущенных тестов.
+- /grpc-speedometer/tests/{testCaseId} - возвращает информацию о тесте по testCaseId.
+- /grpc-speedometer/tests/{testCaseId}/stop - прерывает работу теста по testCaseId не дожидаясь полного выполнения.
+- /grpc-speedometer/tests/{testCaseId}/report - формирует отчет по результатам тестирования теста по testCaseId в виде excel файла. 
 
 ## Взаимодействие между master-node и worker-node
 ### REST
