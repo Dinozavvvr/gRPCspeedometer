@@ -1,5 +1,6 @@
 package ru.itis.masternode.model;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,6 +18,8 @@ import ru.itis.workernode.emumeration.FlowType;
 public class TestCase {
 
     private UUID id = UUID.randomUUID();
+
+    private Long createdAt = System.currentTimeMillis();
 
     private int threadsCount;
 

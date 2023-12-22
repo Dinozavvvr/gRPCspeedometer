@@ -1,9 +1,15 @@
 package ru.itis.masternode.service;
 
+import com.google.api.core.ApiFuture;
+import com.google.cloud.firestore.Query.Direction;
+import com.google.cloud.firestore.QueryDocumentSnapshot;
+import com.google.cloud.firestore.QuerySnapshot;
 import com.google.firebase.cloud.FirestoreClient;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import javax.annotation.Nullable;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -45,21 +51,26 @@ public class TestCaseService {
     public List<TestCase> getAllTestCases() {
         List<TestCase> testCaseList = new ArrayList<>();
 
-        FirestoreClient.getFirestore().collection(TEST_CASES)
-                .listDocuments()
-                .forEach(queryDocumentSnapshot -> {
-                    try {
-                        TestCaseFirebaseEntity testCaseFirebaseEntity = queryDocumentSnapshot.get().get()
-                                .toObject(TestCaseFirebaseEntity.class);
-                        if (testCaseFirebaseEntity != null) {
-                            TestCase testCase = TestCaseFirebaseEntity.toTestCase(testCaseFirebaseEntity);
-                            testCase.setId(UUID.fromString(queryDocumentSnapshot.getId()));
-                            testCaseList.add(testCase);
-                        }
-                    } catch (Exception e) {
-                        // ignore
-                    }
-                });
+        try {
+            ApiFuture<QuerySnapshot> query = FirestoreClient.getFirestore()
+                    .collection(TEST_CASES)
+                    .limit(10)
+                    .orderBy("createdAt", Direction.DESCENDING)
+                    .get();
+
+            QuerySnapshot querySnapshot = query.get();
+
+            for (QueryDocumentSnapshot queryDocumentSnapshot : querySnapshot) {
+                TestCaseFirebaseEntity testCaseFirebaseEntity = queryDocumentSnapshot
+                        .toObject(TestCaseFirebaseEntity.class);
+
+                TestCase testCase = TestCaseFirebaseEntity.toTestCase(testCaseFirebaseEntity);
+                testCase.setId(UUID.fromString(queryDocumentSnapshot.getId()));
+                testCaseList.add(testCase);
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
         return testCaseList;
     }
@@ -93,6 +104,8 @@ public class TestCaseService {
 
         private int requestDepth;
 
+        private long createdAt;
+
         private int workTime;
 
         private int requestBodySize;
@@ -112,6 +125,7 @@ public class TestCaseService {
                     .workTime(testCase.getWorkTime())
                     .threadsCount(testCase.getThreadsCount())
                     .state(testCase.getState().name())
+                    .createdAt(testCase.getCreatedAt())
                     .build();
         }
 
@@ -128,8 +142,10 @@ public class TestCaseService {
                     .workTime(testCaseFirebaseEntity.getWorkTime())
                     .threadsCount(testCaseFirebaseEntity.getThreadsCount())
                     .state(TestCaseState.valueOf(testCaseFirebaseEntity.getState()))
+                    .createdAt(testCaseFirebaseEntity.getCreatedAt())
                     .build();
         }
+
     }
 
 }

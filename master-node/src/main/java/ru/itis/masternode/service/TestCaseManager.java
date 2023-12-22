@@ -109,6 +109,7 @@ public class TestCaseManager {
 
     public static TestCase createTestCase(TestConfig testConfig) {
         return new TestCase(UUID.randomUUID(),
+                System.currentTimeMillis(),
                 testConfig.getThreadsCount(), testConfig.getRequestDepth(),
                 testConfig.getWorkTime(), testConfig.getRequestMethod(),
                 testConfig.getFlowType(), testConfig.getRequestBodySize(),
