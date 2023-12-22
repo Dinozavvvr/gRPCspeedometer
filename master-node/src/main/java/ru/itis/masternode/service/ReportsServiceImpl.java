@@ -14,9 +14,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import ru.itis.masternode.model.StatisticsPerSecond;
-import ru.itis.masternode.model.StatisticsSummary;
-import ru.itis.masternode.model.TestCase;
+import ru.itis.masternode.model.*;
 
 @Service
 @RequiredArgsConstructor
@@ -39,12 +37,14 @@ public class ReportsServiceImpl implements ReportsService {
             row = writeLabels(sheet, row);
 
             StatisticsSummary difference = statisticsDifference(rest, grpc);
+            StatisticsSummaryInTimes differenceInTimes = statisticsDifferenceInTimes(rest, grpc);
             for (int i = 0; i < rest.getStatisticsPerSeconds().size(); i++) {
                 Row rowTemp = sheet.createRow(row + i);
 
                 fillCellsWithStatistics(rest, 0, rowTemp, i);
                 fillCellsWithStatistics(grpc, 5, rowTemp, i);
                 fillCellsWithStatistics(difference, 10, rowTemp, i);
+                fillCellsWithStatisticsInTimes(differenceInTimes, 15, rowTemp, i);
             }
 
             wb.write(outputStream);
@@ -80,8 +80,46 @@ public class ReportsServiceImpl implements ReportsService {
         return new StatisticsSummary(statisticsDifference);
     }
 
+    public StatisticsSummaryInTimes statisticsDifferenceInTimes(StatisticsSummary rest, StatisticsSummary grpc) {
+        List<StatisticsPerSecondInTimes> statisticsDifference = new ArrayList<>();
+
+        for (int i = 0; i < rest.getStatisticsPerSeconds().size(); i++) {
+            StatisticsPerSecondInTimes statisticsPerSecondTemp = new StatisticsPerSecondInTimes(
+                    rest.getStatisticsPerSeconds().get(i).getSecond(),
+                    (double) grpc.getStatisticsPerSeconds().get(i).getRequestsPerSecond()
+                            / rest.getStatisticsPerSeconds().get(i).getRequestsPerSecond(),
+                    (double) grpc.getStatisticsPerSeconds().get(i).getAverageRequestsPerSecond()
+                            / rest.getStatisticsPerSeconds().get(i).getAverageRequestsPerSecond(),
+                    (double) grpc.getStatisticsPerSeconds().get(i).getTotalRequestCount()
+                            / rest.getStatisticsPerSeconds().get(i).getTotalRequestCount(),
+                    rest.getStatisticsPerSeconds().get(i).getTestCaseId()
+            );
+            statisticsDifference.add(statisticsPerSecondTemp);
+        }
+
+        return new StatisticsSummaryInTimes(statisticsDifference);
+    }
+
     public void fillCellsWithStatistics(StatisticsSummary statistics, int firstColumn, Row row,
             int i) {
+        Cell secondCell = row.createCell(firstColumn);
+        secondCell.setCellValue(statistics.getStatisticsPerSeconds().get(i).getSecond());
+
+        Cell requestsPerSecondCell = row.createCell(++firstColumn);
+        requestsPerSecondCell.setCellValue(
+                statistics.getStatisticsPerSeconds().get(i).getRequestsPerSecond());
+
+        Cell averageRequestsPerSecondCell = row.createCell(++firstColumn);
+        averageRequestsPerSecondCell.setCellValue(
+                statistics.getStatisticsPerSeconds().get(i).getAverageRequestsPerSecond());
+
+        Cell totalRequestCountCell = row.createCell(++firstColumn);
+        totalRequestCountCell.setCellValue(
+                statistics.getStatisticsPerSeconds().get(i).getTotalRequestCount());
+    }
+
+    public void fillCellsWithStatisticsInTimes(StatisticsSummaryInTimes statistics, int firstColumn, Row row,
+                                        int i) {
         Cell secondCell = row.createCell(firstColumn);
         secondCell.setCellValue(statistics.getStatisticsPerSeconds().get(i).getSecond());
 
@@ -145,6 +183,9 @@ public class ReportsServiceImpl implements ReportsService {
         grpcLabel.setCellValue("gRPC");
         Cell compareLabel = labelsRow.createCell(10);
         compareLabel.setCellValue("Сравнение");
+        Cell compareInTimesLabel = labelsRow.createCell(15);
+        compareInTimesLabel.setCellValue("Сравнение во сколько раз");
+
 
         Row labelsMetricsRow = sheet.createRow(row++);
         Cell restSecondLabel = labelsMetricsRow.createCell(0);
@@ -173,6 +214,15 @@ public class ReportsServiceImpl implements ReportsService {
         compareAverageRequestsPerSecondLabel.setCellValue("AverageRequestsPerSecond");
         Cell compareTotalRequestCountLabel = labelsMetricsRow.createCell(13);
         compareTotalRequestCountLabel.setCellValue("totalRequestCount");
+
+        Cell compareSecondInTimesLabel = labelsMetricsRow.createCell(15);
+        compareSecondInTimesLabel.setCellValue("Seconds");
+        Cell compareRequestsPerSecondInTimesLabel = labelsMetricsRow.createCell(16);
+        compareRequestsPerSecondInTimesLabel.setCellValue("RequestsPerSecond");
+        Cell compareAverageRequestsPerSecondInTimesLabel = labelsMetricsRow.createCell(17);
+        compareAverageRequestsPerSecondInTimesLabel.setCellValue("AverageRequestsPerSecond");
+        Cell compareTotalRequestCountInTimesLabel = labelsMetricsRow.createCell(18);
+        compareTotalRequestCountInTimesLabel.setCellValue("totalRequestCount");
         return row;
     }
 
