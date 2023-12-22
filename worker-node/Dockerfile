@@ -1,4 +1,4 @@
 FROM openjdk:17-jdk
 COPY ./build/libs/*.jar app.jar
-EXPOSE 8080
+EXPOSE 8080 9090
 ENTRYPOINT ["java","-jar","/app.jar"]

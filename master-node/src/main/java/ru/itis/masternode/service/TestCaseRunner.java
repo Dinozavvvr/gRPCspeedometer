@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
 import ru.itis.masternode.grpc.MasterGrpcService;
@@ -123,6 +124,8 @@ public class TestCaseRunner {
             } catch (InterruptedException e) {
                 log.info("[{}] Test case execution aborted", currentTestCase.getId());
                 stoppingCallback().accept(currentTestCase);
+            } finally {
+                System.gc();
             }
         }
 
@@ -183,8 +186,8 @@ public class TestCaseRunner {
                             currentTestCase, masterGrpcService, testCaseStatistics
                     );
                 } else {
-                    abstractRequestPublisher = new RestApiPostRequestPublisher(
-                            currentTestCase, workerHost, testCaseStatistics);
+                    abstractRequestPublisher = new GrpcPostRequestPublisher(
+                            currentTestCase, masterGrpcService, testCaseStatistics);
                 }
                 Thread thread = new Thread(abstractRequestPublisher);
                 publisherThreads.add(thread);
@@ -278,10 +281,74 @@ public class TestCaseRunner {
         public void run() {
             log.info("thread started");
             while (!Thread.currentThread().isInterrupted()) {
-                masterGrpcService.testGetData(workerConfigInfo);
-                testCaseStatistics.registerSuccessRequest();
+                masterGrpcService.testGetData(workerConfigInfo)
+                        .doOnNext(res -> testCaseStatistics.registerSuccessRequest())
+                        .subscribe();
                 try {
-                    Thread.sleep(3);
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            log.info("thread finished");
+        }
+
+    }
+
+    public static class GrpcPostRequestPublisher extends AbstractRequestPublisher {
+
+        private final ru.itis.workernode.grpc.ExampleData exampleData =
+                ru.itis.workernode.grpc.ExampleData.newBuilder()
+                .setId(1)
+                .setName("name")
+                .setLastName("lastName")
+                .setAge(22)
+                .setDate(LocalDate.now().toString())
+                .setHeight(5.5)
+                .build();
+        private final MasterGrpcService masterGrpcService;
+
+        private final ru.itis.workernode.grpc.WorkerConfigInfo workerConfigInfo;
+
+        public GrpcPostRequestPublisher(TestCase testCase, MasterGrpcService masterGrpcService,
+                TestCaseStatistics testCaseStatistics) {
+            super(testCaseStatistics, testCase);
+
+            this.masterGrpcService = masterGrpcService;
+            RequestConfig requestConfig = RequestConfig.builder()
+                    .depthLevel(testCase.getRequestDepth() - 1)
+                    .flowType(testCase.getFlowType())
+                    .dataSize(testCase.getRequestBodySize())
+                    .build();
+
+            List<ru.itis.workernode.grpc.ExampleData> data = new ArrayList<>();
+            for (int i = 0; i < testCase.getRequestDepth() * testCase.getRequestBodySize(); i++) {
+                data.add(exampleData);
+            }
+
+            this.workerConfigInfo = ru.itis.workernode.grpc.WorkerConfigInfo.newBuilder()
+                    .setConfig(ru.itis.workernode.grpc.RequestConfig.newBuilder()
+                            .setDepthLevel(requestConfig.getDepthLevel())
+                            .setDataSize(requestConfig.getDataSize())
+                            .setFlowType(
+                                    FlowType.WATERFALL.equals(requestConfig.getFlowType()) ?
+                                            ru.itis.workernode.grpc.FlowType.WATERFALL :
+                                            ru.itis.workernode.grpc.FlowType.BATCH)
+                            .build())
+                    .addAllData(data)
+                    .build();
+        }
+
+        @Override
+        public void run() {
+            log.info("thread started");
+            while (!Thread.currentThread().isInterrupted()) {
+                masterGrpcService.testPostData(workerConfigInfo)
+                        .doOnNext(res -> testCaseStatistics.registerSuccessRequest())
+                        .subscribe();
+                try {
+                    Thread.sleep(1);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;

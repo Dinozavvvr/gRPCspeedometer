@@ -1,6 +1,7 @@
 package ru.itis.masternode.service;
 
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.ExposedPort;
@@ -13,9 +14,9 @@ import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import com.github.dockerjava.transport.DockerHttpClient;
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.PreDestroy;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NoArgsConstructor;
@@ -113,15 +114,20 @@ public class EnvironmentManager {
                 .withPortBindings(portBindings)
                 .withNetworkMode(workerConfiguration.network);
 
-        CreateContainerResponse container = dockerClient.createContainerCmd(
-                        workerConfiguration.image)
-                .withEnv(List.of("HOST=http://" + workerNode.nextNodeIp + ":"
-                        + workerNode.nextNodeRestPort))
-                .withEnv(List.of("GRPC_HOST=static://" + workerNode.nextNodeIp + ":"
-                        + workerNode.nextNodeGrpcPort))
-                .withHostConfig(hostConfig)
-                .exec();
+        CreateContainerCmd containerCmd;
 
+        if (nodeToConnect != null) {
+            containerCmd = dockerClient.createContainerCmd(
+                            workerConfiguration.image)
+                    .withEnv(List.of("HOST=http://" + workerNode.nextNodeIp + ":"
+                            + workerNode.nextNodeRestPort))
+                    .withEnv(List.of("GRPC_HOST=static://" + workerNode.nextNodeIp + ":"
+                            + workerNode.nextNodeGrpcPort));
+        } else {
+            containerCmd = dockerClient.createContainerCmd(workerConfiguration.image);
+        }
+
+        CreateContainerResponse container = containerCmd.withHostConfig(hostConfig).exec();
 
         dockerClient.startContainerCmd(container.getId()).exec();
         NetworkSettings networkSettings = dockerClient.inspectContainerCmd(container.getId()).exec()
