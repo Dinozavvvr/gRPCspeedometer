@@ -19,12 +19,23 @@ configurations {
 
 repositories {
     mavenCentral()
+    google()
 }
 
 dependencies {
+    implementation 'com.github.docker-java:docker-java-core:3.3.4'
+    implementation 'com.github.docker-java:docker-java-transport-httpclient5:3.3.4'
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.2.1'
+    implementation 'com.google.firebase:firebase-admin:9.2.0'
+    implementation 'net.devh:grpc-spring-boot-starter:2.15.0.RELEASE'
+    implementation 'org.apache.poi:poi:3.17'
+    implementation 'org.apache.poi:poi-ooxml:3.17'
+
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation project(':worker-node')
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 

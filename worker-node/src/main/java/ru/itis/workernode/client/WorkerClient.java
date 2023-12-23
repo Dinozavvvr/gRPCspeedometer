@@ -24,7 +24,6 @@ public class WorkerClient {
                 .bodyValue(workerConfigInfo)
                 .retrieve()
                 .bodyToMono(WorkerConfigInfo.class)
-                .doOnSubscribe(subscription -> log.info("Post data to another worker"))
                 .doOnError(err -> {
                             log.error(String.format("Error Post data to another worker: %s", err.getMessage()));
                             throw new PostDataException(err.getMessage());
@@ -36,7 +35,6 @@ public class WorkerClient {
         return webClient.get().uri(buildGetUri(requestConfig))
                 .retrieve()
                 .bodyToMono(WorkerConfigInfo.class)
-                .doOnSubscribe(subscription -> log.info("Get data to another worker"))
                 .doOnError(err -> {
                     log.error(String.format("Error Get data from another worker: %s", err.getMessage()));
                             throw new PostDataException(err.getMessage());
