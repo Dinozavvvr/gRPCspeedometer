@@ -1,0 +1,33 @@
+syntax = "proto3";
+option java_multiple_files = true;
+package ru.itis.workernode.grpc;
+
+enum FlowType {
+  WATERFALL = 0;
+  BATCH = 1;
+}
+
+message RequestConfig {
+  int32 depthLevel = 1;
+  int32 dataSize = 2;
+  FlowType flowType = 3;
+}
+
+message ExampleData {
+  int32 id = 1;
+  string name = 2;
+  string lastName = 3;
+  int32 age = 4;
+  string date = 5;
+  double height = 6;
+}
+
+message WorkerConfigInfo {
+  RequestConfig config = 1;
+  repeated ExampleData data = 2;
+}
+
+service WorkerGrpcService {
+  rpc testPostData(WorkerConfigInfo) returns (WorkerConfigInfo);
+  rpc testGetData(WorkerConfigInfo) returns (WorkerConfigInfo);
+}

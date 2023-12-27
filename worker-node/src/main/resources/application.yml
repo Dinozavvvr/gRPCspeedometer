@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: grpc-client
+
+grpc:
+  client:
+    grpc-client:
+      address: ${GRPC_HOST:static://127.0.0.1:9090}
+      enableKeepAlive: true
+      keepAliveWithoutCalls: true
+      negotiationType: plaintext
+
+worker:
+  url: ${HOST:http://localhost:8080}
